@@ -10,7 +10,7 @@ from openai import OpenAI
 load_dotenv()
 LLAMA_API_KEY = os.getenv('LLAMA_API_KEY')
 
-def message_llama(prompt, model="llama3.2:1b", max_tokens=100, temperature=0.7, top_p=1, n=1):
+def message_llama(prompt, model="llama3.2:1b", max_tokens=1000, temperature=0.7, top_p=1, n=1):
     client = OpenAI(
         api_key=LLAMA_API_KEY,
         base_url="https://api.llama-api.com"
@@ -82,7 +82,7 @@ def analyse_image_llm(image_path):
         response = client.chat.completions.create(
             model="llama3.2-90b-vision",
             messages=messages,
-            max_tokens=100,
+            max_tokens=1000,
             temperature=0.7,
             top_p=0.9,
             n=1
