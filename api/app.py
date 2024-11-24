@@ -7,11 +7,12 @@ import spacy
 from collections import Counter
 import concurrent.futures
 from datetime import datetime
-from api.chat.llama import message_llama
-from api.chat.recognition_image import analyse_image_llm
+from ..chat.llama import message_llama, analyse_image_llm
+# from ..chat.recognition_image import analyse_image_llm
 from pytrends.request import TrendReq
 import time
 from statistics import mean
+import os
 
 app = Flask(__name__)
 CORS(app)
@@ -64,7 +65,7 @@ class Page:
         self.internal_links = set()
         self.seo_score = 0
         self.score_details = {}
-        self.description_image = {}
+        self.description_image = []
         self.ensemble_description = []
         self.load_time = {}
 
@@ -242,18 +243,31 @@ class Page:
             self.stats["invalid_links"] += 1
             return None
 
-    def analyze_images(self):
-        """Analyze images using an external function (e.g., OCR) for relevance."""
+    def analyze_images(self) -> None:
+        """Analyse les images en utilisant une fonction externe (OCR)."""
         for image in self.images:
+            image_url = image.get('src', '')
+            if not image_url:
+                continue
+
             try:
-                # Analyze image content
-                description = analyse_image_llm(image)  # Assuming this function is defined
-                self.description_image[image["src"]] = description  # Use `src` as the key
+                # Normaliser l'URL de l'image si elle est relative
+                if not image_url.startswith(('http://', 'https://')):
+                    image_url = urljoin(self.base_url, image_url)
+
+                image_path = download_image(image_url)
+                if not image_path:
+                    raise ValueError(f"Échec du téléchargement: {image_url}")
+
+                # Analyse de l'image (fonction supposée définie ailleurs)
+                description = analyse_image_llm(image_path)
+                self.description_image[image_path] = description
                 self.ensemble_description.append(
-                    f"{image['src']}, ALT: {image['alt']}. Ce que l'image montre : {description}"
+                    f"Image : {image_path}, Description : {description}"
                 )
+
             except Exception as e:
-                error_message = f"⚠️ Impossible d'analyser l'image {image['src']} - {e}"
+                error_message = f"⚠️ Erreur d'analyse de l'image {image_url}: {str(e)}"
                 self.ensemble_description.append(error_message)
                 print(error_message)
 
@@ -337,6 +351,35 @@ def crawl_site(start_url, base_url):
             break
     return all_pages  # Retourner toutes les pages analysées
 
+def download_image(url: str, download_folder: str = "images"):
+    """Télécharge une image avec gestion des erreurs et validation."""
+    try:
+        if not os.path.exists(download_folder):
+            os.makedirs(download_folder)
+
+        # Nettoyer et valider le nom du fichier
+        image_name = os.path.basename(url)
+        if not image_name:
+            image_name = f"image_{hash(url)}"
+        
+        image_path = os.path.join(download_folder, image_name)
+
+        response = requests.get(url, timeout=10)
+        response.raise_for_status()
+
+        # Vérifier le type de contenu
+        content_type = response.headers.get('content-type', '')
+        if not content_type.startswith('image/'):
+            raise ValueError(f"Le contenu n'est pas une image: {content_type}")
+
+        with open(image_path, 'wb') as file:
+            file.write(response.content)
+
+        return image_path
+
+    except Exception as e:
+        print(f"Erreur lors du téléchargement de {url}: {str(e)}")
+        return None
 ##########################################################################
 #                           ANALYSE & RECO                               #
 ##########################################################################
